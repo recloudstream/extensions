@@ -1,0 +1,62 @@
+[
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=www.dailymotion.com&sz=%size%",
+        "jarFileSize": 47203,
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/recloudstream/extensions",
+        "fileSize": 10937,
+        "status": 1,
+        "authors": [
+            "Luna712"
+        ],
+        "tvTypes": [
+            "Others"
+        ],
+        "version": 4,
+        "internalName": "DailymotionProvider",
+        "jarUrl": "https://raw.githubusercontent.com/recloudstream/extensions/builds/DailymotionProvider.jar",
+        "description": "Watch content from Dailymotion",
+        "url": "https://raw.githubusercontent.com/recloudstream/extensions/builds/DailymotionProvider.cs3",
+        "name": "DailymotionProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=invidious.io&sz=%size%",
+        "jarFileSize": 59562,
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/recloudstream/extensions",
+        "fileSize": 13085,
+        "status": 1,
+        "authors": [
+            "Cloudburst"
+        ],
+        "tvTypes": [
+            "Others"
+        ],
+        "version": 9,
+        "internalName": "InvidiousProvider",
+        "jarUrl": "https://raw.githubusercontent.com/recloudstream/extensions/builds/InvidiousProvider.jar",
+        "description": "Watch content from any invidious instance",
+        "url": "https://raw.githubusercontent.com/recloudstream/extensions/builds/InvidiousProvider.cs3",
+        "name": "InvidiousProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=twitch.tv&sz=%size%",
+        "jarFileSize": 54570,
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/recloudstream/extensions",
+        "fileSize": 13673,
+        "status": 1,
+        "authors": [
+            "CranberrySoup"
+        ],
+        "tvTypes": [
+            "Live"
+        ],
+        "version": 2,
+        "internalName": "TwitchProvider",
+        "jarUrl": "https://raw.githubusercontent.com/recloudstream/extensions/builds/TwitchProvider.jar",
+        "description": "Watch livestreams from Twitch",
+        "url": "https://raw.githubusercontent.com/recloudstream/extensions/builds/TwitchProvider.cs3",
+        "name": "TwitchProvider"
+    }
+]
