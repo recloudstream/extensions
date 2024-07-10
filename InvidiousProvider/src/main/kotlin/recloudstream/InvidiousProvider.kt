@@ -8,7 +8,7 @@ import com.lagradost.cloudstream3.utils.loadExtractor
 import java.net.URLEncoder
 
 class InvidiousProvider : MainAPI() { // all providers must be an instance of MainAPI
-    override var mainUrl = "https://invidious.privacyredirect.com"
+    override var mainUrl = "https://inv.tux.pizza"
     override var name = "Invidious" // name of provider
     override val supportedTypes = setOf(TvType.Others)
 
