@@ -4,8 +4,8 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.StringUtils.encodeUri
 import com.lagradost.cloudstream3.utils.loadExtractor
-import java.net.URLEncoder
 
 class InvidiousProvider : MainAPI() { // all providers must be an instance of MainAPI
     override var mainUrl = "https://iv.ggtyler.dev"
@@ -129,9 +129,5 @@ class InvidiousProvider : MainAPI() { // all providers must be an instance of Ma
             )
         )
         return true
-    }
-
-    companion object {
-        fun String.encodeUri() = URLEncoder.encode(this, "utf8")
     }
 }
