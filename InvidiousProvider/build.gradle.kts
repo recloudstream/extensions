@@ -2,17 +2,17 @@
 version = 6
 
 cloudstream {
-    // All of these properties are optional, you can safely remove them.
+    // All of these properties are optional, you can safely remove any of them.
 
     description = "Watch content from any invidious instance"
     authors = listOf("Cloudburst")
 
     /**
-    * Status int as the following:
+    * Status int as one of the following:
     * 0: Down
     * 1: Ok
     * 2: Slow
-    * 3: Beta only
+    * 3: Beta-only
     **/
     status = 1 // Will be 3 if unspecified
 
