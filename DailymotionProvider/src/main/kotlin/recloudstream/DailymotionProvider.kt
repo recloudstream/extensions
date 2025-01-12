@@ -14,8 +14,8 @@ import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.StringUtils.encodeUri
 import com.lagradost.cloudstream3.utils.loadExtractor
-import java.net.URLEncoder
 
 class DailymotionProvider : MainAPI() {
 
@@ -26,6 +26,7 @@ class DailymotionProvider : MainAPI() {
     data class VideoItem(
         val id: String,
         val title: String,
+        @Suppress("PropertyName")
         val thumbnail_360_url: String
     )
 
@@ -33,6 +34,7 @@ class DailymotionProvider : MainAPI() {
         val id: String,
         val title: String,
         val description: String,
+        @Suppress("PropertyName")
         val thumbnail_720_url: String
     )
 
@@ -107,9 +109,5 @@ class DailymotionProvider : MainAPI() {
             callback
         )
         return true
-    }
-
-    companion object {
-        fun String.encodeUri(): String = URLEncoder.encode(this, "utf8")
     }
 }
