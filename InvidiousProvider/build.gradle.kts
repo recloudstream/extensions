@@ -1,5 +1,5 @@
 // use an integer for version numbers
-version = 7
+version = 8
 
 cloudstream {
     // All of these properties are optional, you can safely remove any of them.
@@ -18,4 +18,6 @@ cloudstream {
 
     tvTypes = listOf("Others")
     iconUrl = "https://www.google.com/s2/favicons?domain=invidious.io&sz=%size%"
+
+    isCrossPlatform = true
 }

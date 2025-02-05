@@ -1,5 +1,5 @@
 // Use an integer for version numbers
-version = 1
+version = 2
 
 cloudstream {
     // All of these properties are optional, you can safely remove any of them.
@@ -18,4 +18,6 @@ cloudstream {
 
     tvTypes = listOf("Live")
     iconUrl = "https://www.google.com/s2/favicons?domain=twitch.tv&sz=%size%"
+
+    isCrossPlatform = true
 }
