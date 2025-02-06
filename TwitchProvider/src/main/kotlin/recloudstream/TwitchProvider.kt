@@ -40,7 +40,7 @@ class TwitchProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         return when (request.name) {
-            gamesName -> newHomePageResponse(parseGames(), hasNext = false)
+            gamesName -> newHomePageResponse(parseGames(), hasNext = false) // Get top games
             else -> {
                 val doc = app.get(request.data, params = mapOf("page" to page.toString())).document
                 val channels = doc.select("table#channels tr").map { element ->
