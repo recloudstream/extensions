@@ -16,9 +16,11 @@ import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.StringUtils.encodeUri
 import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.newExtractorLink
 
 class InvidiousProvider : MainAPI() { // all providers must be an instance of MainAPI
     override var mainUrl = "https://iv.ggtyler.dev"
@@ -129,17 +131,11 @@ class InvidiousProvider : MainAPI() { // all providers must be an instance of Ma
             callback
         )
         callback(
-            ExtractorLink(
-                "Invidious",
-                "Invidious",
-                "$mainUrl/api/manifest/dash/id/$data",
-                "",
-                Qualities.Unknown.value,
-                false,
-                mapOf(),
-                null,
-                true
-            )
+            newExtractorLink(this.name, this.name, "$mainUrl/api/manifest/dash/id/$data") {
+                quality = Qualities.Unknown.value
+                type = ExtractorLinkType.DASH
+                referer = ""
+            }
         )
         return true
     }
