@@ -17,8 +17,10 @@ import com.lagradost.cloudstream3.newLiveSearchResponse
 import com.lagradost.cloudstream3.newLiveStreamLoadResponse
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.getQualityFromName
 import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.nodes.Element
 import java.lang.RuntimeException
 
@@ -126,7 +128,8 @@ class TwitchProvider : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse>? {
-        val document = app.get("$mainUrl/search", params = mapOf("q" to query), referer = mainUrl).document
+        val document =
+            app.get("$mainUrl/search", params = mapOf("q" to query), referer = mainUrl).document
         return document.select("table.tops tr").map { it.toLiveSearchResponse() }
     }
 
@@ -155,18 +158,21 @@ class TwitchProvider : MainAPI() {
             subtitleCallback: (SubtitleFile) -> Unit,
             callback: (ExtractorLink) -> Unit
         ) {
-            val response = app.get("https://pwn.sh/tools/streamapi.py?url=$url").parsed<ApiResponse>()
+            val response =
+                app.get("https://pwn.sh/tools/streamapi.py?url=$url").parsed<ApiResponse>()
             response.urls?.forEach { (name, url) ->
                 val quality = getQualityFromName(name.substringBefore("p"))
                 callback.invoke(
-                    ExtractorLink(
+                    newExtractorLink(
                         this.name,
                         "${this.name} ${name.replace("${quality}p", "")}",
-                        url,
-                        "",
-                        quality,
-                        isM3u8 = true
-                ))
+                        url
+                    ) {
+                        this.type = ExtractorLinkType.M3U8
+                        this.quality = quality
+                        this.referer = ""
+                    }
+                )
             }
         }
     }
