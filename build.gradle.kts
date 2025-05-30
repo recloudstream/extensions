@@ -69,11 +69,9 @@ subprojects {
     }
 
     dependencies {
-        val cloudstream by configurations
         val implementation by configurations
 
-        // Stubs for all cloudstream classes
-        cloudstream("com.lagradost:cloudstream3:pre-release")
+        implementation("com.github.recloudstream.cloudstream:library-jvm:master-SNAPSHOT")
 
         // These dependencies can include any of those which are added by the app,
         // but you don't need to include any of them if you don't need them.
@@ -81,6 +79,9 @@ subprojects {
         implementation(kotlin("stdlib")) // Adds Standard Kotlin Features
         implementation("com.github.Blatzar:NiceHttp:0.4.11") // HTTP Lib
         implementation("org.jsoup:jsoup:1.18.3") // HTML Parser
+        // IMPORTANT: Do not bump Jackson above 2.13.1, as newer versions will
+        // break compatibility on older Android devices.
+        implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.13.1") // JSON Parser
     }
 }
 

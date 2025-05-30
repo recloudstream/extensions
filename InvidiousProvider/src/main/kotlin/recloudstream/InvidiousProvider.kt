@@ -1,6 +1,19 @@
 package recloudstream
 
-import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.Actor
+import com.lagradost.cloudstream3.ActorData
+import com.lagradost.cloudstream3.HomePageList
+import com.lagradost.cloudstream3.HomePageResponse
+import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.MainAPI
+import com.lagradost.cloudstream3.MainPageRequest
+import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SubtitleFile
+import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.newHomePageResponse
+import com.lagradost.cloudstream3.newMovieLoadResponse
+import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.Qualities
@@ -85,14 +98,14 @@ class InvidiousProvider : MainAPI() { // all providers must be an instance of Ma
                 title,
                 "${provider.mainUrl}/watch?v=$videoId",
                 TvType.Movie,
-                "$videoId"
+                videoId
             ) {
                 plot = description
                 posterUrl = "${provider.mainUrl}/vi/$videoId/hqdefault.jpg"
                 recommendations = recommendedVideos.map { it.toSearchResponse(provider) }
                 actors = listOf(
                     ActorData(
-                        Actor(author, authorThumbnails.get(authorThumbnails.size - 1)?.url ?: ""),
+                        Actor(author, authorThumbnails.getOrNull(authorThumbnails.size - 1)?.url ?: ""),
                         roleString = "Author"
                     )
                 )
