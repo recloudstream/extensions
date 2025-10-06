@@ -12,6 +12,7 @@ import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SearchResponseList
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.app
@@ -21,12 +22,14 @@ import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
+import com.lagradost.cloudstream3.toNewSearchResponseList
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.StringUtils.encodeUri
 import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -69,14 +72,16 @@ class InternetArchiveProvider : MainAPI() {
         }
     }
 
-    override suspend fun search(query: String): List<SearchResponse> {
+    override suspend fun search(query: String, page: Int): SearchResponseList? {
         return try {
-            val responseText = app.get("$mainUrl/advancedsearch.php?q=${query.encodeUri()}+mediatype:(movies OR audio)&fl[]=identifier&fl[]=title&fl[]=mediatype&rows=26&output=json").text
+            val responseText = app.get("$mainUrl/advancedsearch.php?q=${query.encodeUri()}+mediatype:(movies OR audio)&fl[]=identifier&fl[]=title&fl[]=mediatype&rows=26&page=$page&output=json").text
             val res = tryParseJson<SearchResult>(responseText)
-            res?.response?.docs?.map { it.toSearchResponse(this) } ?: emptyList()
+            res?.response?.docs?.map {
+                it.toSearchResponse(this)
+            }?.toNewSearchResponseList()
         } catch (e: Exception) {
             logError(e)
-            emptyList()
+            null
         }
     }
 
@@ -432,13 +437,14 @@ class InternetArchiveProvider : MainAPI() {
 
             distinctURLData.sortedByDescending { it.size }.forEach { urlData: URLData ->
                 callback(
-                    ExtractorLink(
+                    newExtractorLink(
                         this.name,
                         getName(urlData.format),
-                        urlData.url,
-                        "",
-                        urlData.quality
-                    )
+                        urlData.url
+                    ) {
+                        quality = urlData.quality
+                        referer = ""
+                    }
                 )
             }
         } else {
