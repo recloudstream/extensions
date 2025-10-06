@@ -1,10 +1,26 @@
 package recloudstream
 
-import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.HomePageList
+import com.lagradost.cloudstream3.HomePageResponse
+import com.lagradost.cloudstream3.LiveSearchResponse
+import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.MainAPI
+import com.lagradost.cloudstream3.MainPageRequest
+import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SubtitleFile
+import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.fixUrl
+import com.lagradost.cloudstream3.mainPageOf
+import com.lagradost.cloudstream3.newHomePageResponse
+import com.lagradost.cloudstream3.newLiveSearchResponse
+import com.lagradost.cloudstream3.newLiveStreamLoadResponse
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.getQualityFromName
 import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.nodes.Element
 import java.lang.RuntimeException
 
@@ -26,20 +42,21 @@ class TwitchProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         return when (request.name) {
-            gamesName -> HomePageResponse(parseGames(), hasNext = false) // Get top games
+            gamesName -> newHomePageResponse(parseGames(), hasNext = false) // Get top games
             else -> {
                 val doc = app.get(request.data, params = mapOf("page" to page.toString())).document
                 val channels = doc.select("table#channels tr").map { element ->
                     element.toLiveSearchResponse()
                 }
-                HomePageResponse(
+                newHomePageResponse(
                     listOf(
                         HomePageList(
                             request.name,
                             channels,
                             isHorizontalImages = isHorizontal
                         )
-                    ), hasNext = true
+                    ),
+                    hasNext = true
                 )
             }
         }
@@ -50,7 +67,12 @@ class TwitchProvider : MainAPI() {
         val linkName = anchor.attr("href").substringAfterLast("/")
         val name = anchor.firstOrNull { it.text().isNotBlank() }?.text()
         val image = this.select("img").attr("src")
-        return LiveSearchResponse(name ?: "", linkName, this@TwitchProvider.name, TvType.Live, image)
+        return newLiveSearchResponse(
+            name ?: "",
+            linkName,
+            TvType.Live,
+            fix = false
+        ) { posterUrl = image }
     }
 
     private suspend fun parseGames(): List<HomePageList> {
@@ -85,7 +107,7 @@ class TwitchProvider : MainAPI() {
         val poster = doc.select("div.embed-responsive > img").attr("src").ifEmpty { image }
         val description = doc.select("div[style='word-wrap:break-word;font-size:12px;']").text()
         val language = doc.select("a.label.label-soft").text().ifEmpty { null }
-        val isLive = !doc.select("div.live-indicator-container").isEmpty()
+        val isLive = doc.select("div.live-indicator-container").isNotEmpty()
 
         val tags = listOfNotNull(
             isLive.let { if (it) "Live" else "Offline" },
@@ -95,13 +117,19 @@ class TwitchProvider : MainAPI() {
 
         val twitchUrl = "https://twitch.tv/$realUrl"
 
-        return LiveStreamLoadResponse(
-            name, twitchUrl, this.name, twitchUrl, plot = description, posterUrl = image, backgroundPosterUrl = poster, tags = tags
-        )
+        return newLiveStreamLoadResponse(
+            name, twitchUrl, twitchUrl
+        ) {
+            plot = description
+            posterUrl = image
+            backgroundPosterUrl = poster
+            this@newLiveStreamLoadResponse.tags = tags
+        }
     }
 
     override suspend fun search(query: String): List<SearchResponse>? {
-        val document = app.get("$mainUrl/search", params = mapOf("q" to query), referer = mainUrl).document
+        val document =
+            app.get("$mainUrl/search", params = mapOf("q" to query), referer = mainUrl).document
         return document.select("table.tops tr").map { it.toLiveSearchResponse() }
     }
 
@@ -130,18 +158,21 @@ class TwitchProvider : MainAPI() {
             subtitleCallback: (SubtitleFile) -> Unit,
             callback: (ExtractorLink) -> Unit
         ) {
-            val response = app.get("https://pwn.sh/tools/streamapi.py?url=$url").parsed<ApiResponse>()
+            val response =
+                app.get("https://pwn.sh/tools/streamapi.py?url=$url").parsed<ApiResponse>()
             response.urls?.forEach { (name, url) ->
                 val quality = getQualityFromName(name.substringBefore("p"))
                 callback.invoke(
-                    ExtractorLink(
+                    newExtractorLink(
                         this.name,
                         "${this.name} ${name.replace("${quality}p", "")}",
-                        url,
-                        "",
-                        quality,
-                        isM3u8 = true
-                ))
+                        url
+                    ) {
+                        this.type = ExtractorLinkType.M3U8
+                        this.quality = quality
+                        this.referer = ""
+                    }
+                )
             }
         }
     }

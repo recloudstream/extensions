@@ -1,5 +1,6 @@
 package recloudstream
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
@@ -20,22 +21,20 @@ import com.lagradost.cloudstream3.utils.loadExtractor
 class DailymotionProvider : MainAPI() {
 
     data class VideoSearchResponse(
-        val list: List<VideoItem>
+        @JsonProperty("list") val list: List<VideoItem>
     )
 
     data class VideoItem(
-        val id: String,
-        val title: String,
-        @Suppress("PropertyName")
-        val thumbnail_360_url: String
+        @JsonProperty("id") val id: String,
+        @JsonProperty("title") val title: String,
+        @JsonProperty("thumbnail_360_url") val thumbnail360Url: String
     )
 
     data class VideoDetailResponse(
-        val id: String,
-        val title: String,
-        val description: String,
-        @Suppress("PropertyName")
-        val thumbnail_720_url: String
+        @JsonProperty("id") val id: String,
+        @JsonProperty("title") val title: String,
+        @JsonProperty("description") val description: String,
+        @JsonProperty("thumbnail_720_url") val thumbnail720Url: String
     )
 
     override var mainUrl = "https://api.dailymotion.com"
@@ -81,7 +80,7 @@ class DailymotionProvider : MainAPI() {
             "https://www.dailymotion.com/video/${this.id}",
             TvType.Movie
         ) {
-            this.posterUrl = thumbnail_360_url
+            this.posterUrl = thumbnail360Url
         }
     }
 
@@ -93,7 +92,7 @@ class DailymotionProvider : MainAPI() {
             this.id
         ) {
             plot = description
-            posterUrl = thumbnail_720_url
+            posterUrl = thumbnail720Url
         }
     }
 

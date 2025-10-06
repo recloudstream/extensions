@@ -1,12 +1,11 @@
 package recloudstream
 
-import android.content.Context
+import com.lagradost.cloudstream3.plugins.BasePlugin
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
-import com.lagradost.cloudstream3.plugins.Plugin
 
 @CloudstreamPlugin
-class DailymotionPlugin: Plugin() {
-    override fun load(context: Context) {
+class DailymotionPlugin: BasePlugin() {
+    override fun load() {
         // All providers should be added in this manner. Please don't edit the providers list directly.
         registerMainAPI(DailymotionProvider())
     }
