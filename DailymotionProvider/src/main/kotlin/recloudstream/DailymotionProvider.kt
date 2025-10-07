@@ -58,8 +58,7 @@ class DailymotionProvider : MainAPI() {
                     popular.map { it.toSearchResponse(this) },
                     true
                 ),
-            ),
-            false
+            )
         )
     }
 
