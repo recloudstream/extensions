@@ -63,8 +63,7 @@ class InternetArchiveProvider : MainAPI() {
             newHomePageResponse(
                 listOf(
                     HomePageList("Featured", homePageList, true)
-                ),
-                false
+                )
             )
         } catch (e: Exception) {
             logError(e)
