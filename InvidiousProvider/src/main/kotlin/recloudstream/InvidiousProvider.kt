@@ -8,12 +8,14 @@ import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SearchResponseList
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
+import com.lagradost.cloudstream3.toNewSearchResponseList
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
@@ -23,7 +25,7 @@ import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 
 class InvidiousProvider : MainAPI() { // all providers must be an instance of MainAPI
-    override var mainUrl = "https://iv.ggtyler.dev"
+    override var mainUrl = "https://inv.nadeko.net"
     override var name = "Invidious" // name of provider
     override val supportedTypes = setOf(TvType.Others)
 
@@ -57,11 +59,13 @@ class InvidiousProvider : MainAPI() { // all providers must be an instance of Ma
     }
 
     // this function gets called when you search for something
-    override suspend fun search(query: String): List<SearchResponse> {
+    override suspend fun search(query: String, page: Int): SearchResponseList? {
         val res = tryParseJson<List<SearchEntry>>(
-            app.get("$mainUrl/api/v1/search?q=${query.encodeUri()}&page=1&type=video&fields=videoId,title").text
+            app.get("$mainUrl/api/v1/search?q=${query.encodeUri()}&page=$page&type=video&fields=videoId,title").text
         )
-        return res?.map { it.toSearchResponse(this) } ?: emptyList()
+        return res?.map {
+            it.toSearchResponse(this)
+        }?.toNewSearchResponseList()
     }
 
     override suspend fun load(url: String): LoadResponse? {
