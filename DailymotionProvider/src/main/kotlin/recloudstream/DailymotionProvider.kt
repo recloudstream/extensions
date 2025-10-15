@@ -7,12 +7,14 @@ import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SearchResponseList
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
+import com.lagradost.cloudstream3.toNewSearchResponseList
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.StringUtils.encodeUri
@@ -46,7 +48,7 @@ class DailymotionProvider : MainAPI() {
     override val hasMainPage = true
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val response = app.get("$mainUrl/videos?fields=id,title,thumbnail_360_url&limit=26").text
+        val response = app.get("$mainUrl/videos?fields=id,title,thumbnail_360_url&limit=26&page=$page").text
         val popular = tryParseJson<VideoSearchResponse>(response)?.list ?: emptyList()
 
         return newHomePageResponse(
@@ -56,15 +58,16 @@ class DailymotionProvider : MainAPI() {
                     popular.map { it.toSearchResponse(this) },
                     true
                 ),
-            ),
-            false
+            )
         )
     }
 
-    override suspend fun search(query: String): List<SearchResponse> {
-        val response = app.get("$mainUrl/videos?fields=id,title,thumbnail_360_url&limit=10&search=${query.encodeUri()}").text
-        val searchResults = tryParseJson<VideoSearchResponse>(response)?.list ?: return emptyList()
-        return searchResults.map { it.toSearchResponse(this) }
+    override suspend fun search(query: String, page: Int): SearchResponseList? {
+        val response = app.get("$mainUrl/videos?fields=id,title,thumbnail_360_url&limit=26&page=$page&search=${query.encodeUri()}").text
+        val searchResults = tryParseJson<VideoSearchResponse>(response)?.list
+        return searchResults?.map {
+            it.toSearchResponse(this)
+        }?.toNewSearchResponseList()
     }
 
     override suspend fun load(url: String): LoadResponse? {
