@@ -16,7 +16,7 @@ cloudstream {
      **/
     status = 1 // Will be 3 if unspecified
 
-    tvTypes = listOf("Others")
+    tvTypes = listOf("TVSeries")
     iconUrl = "https://www.google.com/s2/favicons?domain=www.dailymotion.com&sz=%size%"
 
     isCrossPlatform = true
