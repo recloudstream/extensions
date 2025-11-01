@@ -1,11 +1,11 @@
 // Use an integer for version numbers
-version = 2
+version = 1
 
 cloudstream {
     // All of these properties are optional, you can safely remove any of them.
 
-    description = "Watch livestreams from Twitch"
-    authors = listOf("CranberrySoup")
+    description = "Watch content from the Internet Archive at archive.org"
+    authors = listOf("Luna712")
 
     /**
      * Status int as one of the following:
@@ -16,8 +16,8 @@ cloudstream {
      */
     status = 1 // Will be 3 if unspecified
 
-    tvTypes = listOf("Live")
-    iconUrl = "https://www.google.com/s2/favicons?domain=twitch.tv&sz=%size%"
+    tvTypes = listOf("Others")
+    iconUrl = "https://www.google.com/s2/favicons?domain=archive.org&sz=%size%"
 
     isCrossPlatform = true
 }
