@@ -32,6 +32,10 @@ class YoutubeProvider : MainAPI() {
         "live" to "Live"
     )
 
+    // Cache to store pagination state (nextPage tokens).
+    // Cloudstream requests sequential integers for pagination (page 1, 2, 3...),
+    // but NewPipe requires the specific token object from the previous page
+    // to fetch the next batch of results.
     private val pageCache = mutableMapOf<String, org.schabi.newpipe.extractor.Page?>()
     override suspend fun getMainPage(
         page: Int,
@@ -198,7 +202,7 @@ class YoutubeProvider : MainAPI() {
 
         val tabs = extractor.tabs
         val videosTab = tabs.firstOrNull { it.url.contains("/videos") } ?: tabs.firstOrNull()
-            ?: throw RuntimeException("No videos tab found")
+        ?: throw RuntimeException("No videos tab found")
 
         val videosExtractor = ServiceList.YouTube.getChannelTabExtractor(videosTab)
         val episodes = mutableListOf<Episode>()
@@ -211,7 +215,11 @@ class YoutubeProvider : MainAPI() {
             }
         })
 
-        while (page.hasNextPage()) {
+        // Limit the number of pages fetched to prevent massive API overhead
+        var pagesLoaded = 1
+        val maxPagesToLoad = 5
+
+        while (page.hasNextPage() && pagesLoaded < maxPagesToLoad) {
             page = videosExtractor.getPage(page.nextPage)
             episodes.addAll(page.items.map { item ->
                 newEpisode(item.url) {
@@ -219,7 +227,18 @@ class YoutubeProvider : MainAPI() {
                     posterUrl = item.thumbnails.lastOrNull()?.url
                 }
             })
+            pagesLoaded++
         }
+
+//        while (page.hasNextPage()) {
+//            page = videosExtractor.getPage(page.nextPage)
+//            episodes.addAll(page.items.map { item ->
+//                newEpisode(item.url) {
+//                    name = item.name
+//                    posterUrl = item.thumbnails.lastOrNull()?.url
+//                }
+//            })
+//        }
 
         return newTvSeriesLoadResponse(
             channelName,
@@ -261,7 +280,10 @@ class YoutubeProvider : MainAPI() {
             }
         })
 
-        while (page.hasNextPage()) {
+        var pagesLoaded = 1
+        val maxPagesToLoad = 5
+
+        while (page.hasNextPage() && pagesLoaded < maxPagesToLoad) {
             page = extractor.getPage(page.nextPage)
             episodes.addAll(page.items.map { item ->
                 newEpisode(item.url) {
@@ -269,7 +291,18 @@ class YoutubeProvider : MainAPI() {
                     posterUrl = item.thumbnails.lastOrNull()?.url
                 }
             })
+            pagesLoaded++
         }
+
+//        while (page.hasNextPage()) {
+//            page = extractor.getPage(page.nextPage)
+//            episodes.addAll(page.items.map { item ->
+//                newEpisode(item.url) {
+//                    name = item.name
+//                    posterUrl = item.thumbnails.lastOrNull()?.url
+//                }
+//            })
+//        }
 
         return newTvSeriesLoadResponse(
             playlistName,
