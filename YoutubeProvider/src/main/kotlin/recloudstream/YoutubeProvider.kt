@@ -7,8 +7,6 @@ import org.schabi.newpipe.extractor.kiosk.KioskExtractor
 import org.schabi.newpipe.extractor.InfoItem
 //import org.schabi.newpipe.extractor.localization.ContentCountry
 import org.schabi.newpipe.extractor.stream.StreamInfo
-import java.util.Locale
-import kotlin.concurrent.thread
 
 class YoutubeProvider : MainAPI() {
     override var mainUrl = "https://www.youtube.com"
@@ -24,36 +22,15 @@ class YoutubeProvider : MainAPI() {
 
     private val service = ServiceList.YouTube
 
-    // Make mainPage dynamic and updatable
-    override var mainPage: List<MainPageData> = emptyList()
-
-    init {
-        val kiosks = service.kioskList.availableKiosks
-        mainPage = kiosks.map { id ->
-            val fallbackName = id.split("_").joinToString(" ") { word ->
-                word.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
-            }
-            MainPageData(fallbackName, id)
-        }
-
-        thread {
-            val localizedPages = kiosks.map { id ->
-                var localizedLabel = id
-                try {
-                    val extractor = service.kioskList.getExtractorById(id, null)
-                    // extractor.forceContentCountry(Localisation to be handled later)
-                    extractor.fetchPage()
-                    localizedLabel = extractor.name
-                } catch (e: Exception) {
-                    localizedLabel = id.split("_").joinToString(" ") { word ->
-                        word.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
-                    }
-                }
-                MainPageData(localizedLabel, id)
-            }
-            mainPage = localizedPages
-        }
-    }
+    // Clean, static definition of the main page tabs using the available kiosks
+    override val mainPage = mainPageOf(
+        "Trending" to "Trending",
+        "trending_movies_and_shows" to "Movies & Shows",
+        "trending_music" to "Music",
+        "trending_gaming" to "Gaming",
+        "trending_podcasts_episodes" to "Podcasts",
+        "live" to "Live"
+    )
 
     private val pageCache = mutableMapOf<String, org.schabi.newpipe.extractor.Page?>()
     override suspend fun getMainPage(
