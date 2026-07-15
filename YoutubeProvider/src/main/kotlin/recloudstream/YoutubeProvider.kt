@@ -1,5 +1,6 @@
 package recloudstream
 
+import android.os.Build
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.schabi.newpipe.extractor.ServiceList
@@ -7,6 +8,7 @@ import org.schabi.newpipe.extractor.kiosk.KioskExtractor
 import org.schabi.newpipe.extractor.InfoItem
 //import org.schabi.newpipe.extractor.localization.ContentCountry
 import org.schabi.newpipe.extractor.stream.StreamInfo
+import org.schabi.newpipe.extractor.stream.StreamInfoItem
 
 class YoutubeProvider : MainAPI() {
     override var mainUrl = "https://www.youtube.com"
@@ -191,6 +193,20 @@ class YoutubeProvider : MainAPI() {
         }
     }
 
+    private fun StreamInfoItem.toEpisode(): Episode {
+        return newEpisode(url) {
+            name = this@toEpisode.name
+            description = this@toEpisode.shortDescription
+            posterUrl = thumbnails.lastOrNull()?.url
+            runTime = this@toEpisode.duration.toInt() / 60
+
+            // toEpochSecond only works on Android SDK 26+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                date = this@toEpisode.uploadDate?.instant?.toEpochMilli()
+            }
+        }
+    }
+
     private suspend fun loadChannel(url: String): LoadResponse {
         val extractor = ServiceList.YouTube.getChannelExtractor(url)
         extractor.fetchPage()
@@ -208,12 +224,7 @@ class YoutubeProvider : MainAPI() {
         val episodes = mutableListOf<Episode>()
 
         var page = videosExtractor.initialPage
-        episodes.addAll(page.items.map { item ->
-            newEpisode(item.url) {
-                name = item.name
-                posterUrl = item.thumbnails.lastOrNull()?.url
-            }
-        })
+        episodes.addAll(page.items.filterIsInstance<StreamInfoItem>().map { it.toEpisode() })
 
         // Limit the number of pages fetched to prevent massive API overhead
         var pagesLoaded = 1
@@ -221,23 +232,13 @@ class YoutubeProvider : MainAPI() {
 
         while (page.hasNextPage() && pagesLoaded < maxPagesToLoad) {
             page = videosExtractor.getPage(page.nextPage)
-            episodes.addAll(page.items.map { item ->
-                newEpisode(item.url) {
-                    name = item.name
-                    posterUrl = item.thumbnails.lastOrNull()?.url
-                }
-            })
+            episodes.addAll(page.items.filterIsInstance<StreamInfoItem>().map { it.toEpisode() })
             pagesLoaded++
         }
 
 //        while (page.hasNextPage()) {
 //            page = videosExtractor.getPage(page.nextPage)
-//            episodes.addAll(page.items.map { item ->
-//                newEpisode(item.url) {
-//                    name = item.name
-//                    posterUrl = item.thumbnails.lastOrNull()?.url
-//                }
-//            })
+//            episodes.addAll(page.items.filterIsInstance<StreamInfoItem>().map { it.toEpisode() })
 //        }
 
         return newTvSeriesLoadResponse(
@@ -273,24 +274,14 @@ class YoutubeProvider : MainAPI() {
         val episodes = mutableListOf<Episode>()
 
         var page = extractor.getInitialPage()
-        episodes.addAll(page.items.map { item ->
-            newEpisode(item.url) {
-                name = item.name
-                posterUrl = item.thumbnails.lastOrNull()?.url
-            }
-        })
+        episodes.addAll(page.items.map { it.toEpisode() })
 
         var pagesLoaded = 1
         val maxPagesToLoad = 5
 
         while (page.hasNextPage() && pagesLoaded < maxPagesToLoad) {
             page = extractor.getPage(page.nextPage)
-            episodes.addAll(page.items.map { item ->
-                newEpisode(item.url) {
-                    name = item.name
-                    posterUrl = item.thumbnails.lastOrNull()?.url
-                }
-            })
+            episodes.addAll(page.items.map { it.toEpisode() })
             pagesLoaded++
         }
 
