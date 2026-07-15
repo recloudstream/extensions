@@ -174,7 +174,7 @@ class YoutubeProvider : MainAPI() {
         ) {
             plot = info.description.content.toString()
             posterUrl = info.thumbnails.lastOrNull()?.url
-            duration = info.duration.toInt()
+            duration = info.duration.toInt() / 60
 
             info.uploaderName?.takeIf { it.isNotBlank() }?.let { uploader ->
                 actors = listOf(
