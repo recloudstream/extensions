@@ -1,12 +1,11 @@
-package recloudstream
+package com.ngefilm
 
-import com.lagradost.cloudstream3.plugins.BasePlugin
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
+import com.lagradost.cloudstream3.plugins.Plugin
 
 @CloudstreamPlugin
-class InvidiousPlugin: BasePlugin() {
-    override fun load() {
-        // All providers should be added in this manner. Please don't edit the providers list directly.
+class NgefilmPlugin : Plugin() {
+    override fun load(context: android.content.Context) {
         registerMainAPI(InvidiousProvider())
     }
 }
