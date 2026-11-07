@@ -1,7 +1,8 @@
+
 name: Build
 
-concurrency: 
-  group: "build"
+concurrency:
+  group: build
   cancel-in-progress: true
 
 on:
@@ -13,51 +14,67 @@ on:
     paths-ignore:
       - '*.md'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@master
-        with:
-          path: "src"
 
-      - name: Checkout builds
-        uses: actions/checkout@master
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
         with:
-          ref: "builds"
-          path: "builds"
-      
-      - name: Clean old builds
-        run: |
-          rm -f $GITHUB_WORKSPACE/builds/*.cs3 || true
-          rm -f $GITHUB_WORKSPACE/builds/*.jar || true
+          path: src
+
+      - name: Checkout builds branch
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: builds
+          path: builds
+
+      - name: Create builds directory
+        run: mkdir -p "$GITHUB_WORKSPACE/builds"
 
       - name: Setup JDK 17
-        uses: actions/setup-java@v1
+        uses: actions/setup-java@v4
         with:
-          java-version: 17
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools build-tools;34.0.0 platforms;android-34'
 
       - name: Build Plugins
         run: |
-          cd $GITHUB_WORKSPACE/src
+          cd "$GITHUB_WORKSPACE/src"
           chmod +x gradlew
           ./gradlew make makePluginsJson
           ./gradlew ensureJarCompatibility
-          cp **/build/*.cs3 $GITHUB_WORKSPACE/builds || true
-          cp **/build/*.jar $GITHUB_WORKSPACE/builds || true
-          cp build/plugins.json $GITHUB_WORKSPACE/builds || true
+
+      - name: Copy build files
+        run: |
+          find "$GITHUB_WORKSPACE/src" -type f \( -name "*.cs3" -o -name "*.jar" \) \
+            -exec cp -v {} "$GITHUB_WORKSPACE/builds/" \;
+
+          if [ -f "$GITHUB_WORKSPACE/src/build/plugins.json" ]; then
+            cp "$GITHUB_WORKSPACE/src/build/plugins.json" "$GITHUB_WORKSPACE/builds/"
+          fi
 
       - name: Push builds
         run: |
-          cd $GITHUB_WORKSPACE/builds
+          cd "$GITHUB_WORKSPACE/builds"
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
           git add .
-          git commit --amend -m "Build $GITHUB_SHA" || exit 0
-          git push --force
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Build $GITHUB_SHA"
+            git push origin HEAD:builds
+          else
+            echo "No build changes to push."
+          fi
