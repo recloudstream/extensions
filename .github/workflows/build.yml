@@ -1,4 +1,3 @@
-
 name: Build
 
 concurrency:
@@ -49,11 +48,24 @@ jobs:
         with:
           packages: 'platform-tools build-tools;34.0.0 platforms;android-34'
 
-      - name: Build Plugins
+      - name: Build Plugins (with retries for JitPack)
         run: |
           cd "$GITHUB_WORKSPACE/src"
           chmod +x gradlew
-          ./gradlew make makePluginsJson
+          ok=0
+          for i in 1 2 3 4; do
+            echo "=== Build attempt $i ==="
+            if ./gradlew make makePluginsJson --refresh-dependencies; then
+              ok=1
+              break
+            fi
+            echo "Attempt $i failed, waiting 60s for JitPack..."
+            sleep 60
+          done
+          if [ "$ok" != "1" ]; then
+            echo "Build failed after 4 attempts"
+            exit 1
+          fi
           ./gradlew ensureJarCompatibility
 
       - name: Copy build files
