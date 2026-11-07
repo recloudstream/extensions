@@ -1,7 +1,10 @@
 package com.shekar.telugu
 
+import android.util.Base64
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.*
+import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 
@@ -12,62 +15,107 @@ class TeluguProvider : MainAPI() {
     override var lang = "te"
     override val supportedTypes = setOf(TvType.Movie)
 
+    private val cfKiller = CloudflareKiller()
+
     override val mainPage = mainPageOf(
-        "$mainUrl/category/telugu-movies-2024/" to "Telugu 2024",
-        "$mainUrl/category/telugu-movies-2023/" to "Telugu 2023",
-        "$mainUrl/category/dubbed-movies/" to "Dubbed Movies"
+        "$mainUrl/category/telugu-movies-2026" to "Telugu 2026",
+        "$mainUrl/category/telugu-movies-2025" to "Telugu 2025",
+        "$mainUrl/category/telugu-movies-2024" to "Telugu 2024",
+        "$mainUrl/language/telugu-dubbed" to "Telugu Dubbed"
     )
 
-    private val itemSelector =
-        "div.content div.item, div.cont_display, div.movies-list div.item, article, li.film"
+    // ---------- listing ----------
 
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = if (page <= 1) request.data else "${request.data.trimEnd('/')}/page/$page/"
-        val document = app.get(url, referer = mainUrl).document
-        val home = document.select(itemSelector).mapNotNull { it.toSearchResult() }
-        return newHomePageResponse(request.name, home, hasNext = home.isNotEmpty())
-    }
+    private fun Document.parseCards(): List<SearchResponse> =
+        select("a[href$=.html]:has(img)")
+            .mapNotNull { it.toSearchResult() }
+            .distinctBy { it.url }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val link = this.selectFirst("a[href]") ?: return null
-        val href = fixUrl(link.attr("href"))
-        val img = this.selectFirst("img")
-        val title = link.attr("title").ifBlank {
-            img?.attr("alt").orEmpty().ifBlank { link.text() }
-        }.trim()
-        val poster = fixUrlNull(img?.attr("data-src")?.ifBlank { null } ?: img?.attr("src"))
-
+        val href = fixUrl(attr("href"))
+        val img = selectFirst("img")
+        val title = attr("title").ifBlank { img?.attr("alt").orEmpty() }
+            .ifBlank { text() }.trim()
+        val poster = fixUrlNull(
+            img?.attr("data-src")?.ifBlank { null } ?: img?.attr("src")
+        )
         if (title.isBlank() || href.isBlank()) return null
-
         return newMovieSearchResponse(title, href, TvType.Movie) {
             this.posterUrl = poster
         }
     }
 
-    override suspend fun search(query: String): List<SearchResponse> {
-        val q = URLEncoder.encode(query, "UTF-8")
-        val document = app.get("$mainUrl/?s=$q", referer = mainUrl).document
-        return document.select(itemSelector).mapNotNull { it.toSearchResult() }
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val url = if (page <= 1) request.data else "${request.data.trimEnd('/')}/page/$page"
+        val doc = app.get(url, referer = mainUrl, interceptor = cfKiller).document
+        val home = doc.parseCards()
+        return newHomePageResponse(request.name, home, hasNext = home.isNotEmpty())
     }
 
-    override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url, referer = mainUrl).document
-
-        val title = document.selectFirst("meta[property=og:title]")?.attr("content")
-            ?: document.selectFirst("h1.entry-title, h1")?.text()
-            ?: "Movie"
-        val poster = fixUrlNull(
-            document.selectFirst("meta[property=og:image]")?.attr("content")
-                ?: document.selectFirst("div.entry-content img, .post-thumbnail img")?.attr("src")
-        )
-        val description = document.selectFirst("meta[property=og:description]")?.attr("content")
-            ?: document.selectFirst("div.entry-content p")?.text()
-
-        // Pass the movie PAGE url as data so loadLinks() can sweep all candidate streams
-        return newMovieLoadResponse(title.trim(), url, TvType.Movie, url) {
-            this.posterUrl = poster
-            this.plot = description
+    override suspend fun search(query: String): List<SearchResponse> {
+        val q = URLEncoder.encode(query, "UTF-8")
+        val patterns = listOf("$mainUrl/?s=$q", "$mainUrl/search?q=$q", "$mainUrl/search/$q")
+        for (u in patterns) {
+            val results = try {
+                app.get(u, referer = mainUrl, interceptor = cfKiller).document.parseCards()
+            } catch (e: Exception) {
+                emptyList()
+            }
+            if (results.isNotEmpty()) return results
         }
+        return emptyList()
+    }
+
+    // ---------- details ----------
+
+    override suspend fun load(url: String): LoadResponse {
+        val doc = app.get(url, referer = mainUrl, interceptor = cfKiller).document
+
+        val title = (doc.selectFirst("meta[property=og:title]")?.attr("content")
+            ?: doc.selectFirst("h2")?.text() ?: "Movie")
+            .substringBefore(" | MovieRulz").trim()
+        val poster = fixUrlNull(doc.selectFirst("meta[property=og:image]")?.attr("content"))
+        val plot = doc.selectFirst("h4:containsOwn(Synopsis)")?.nextElementSibling()?.text()
+            ?: doc.selectFirst("meta[property=og:description]")?.attr("content")
+        val year = Regex("""\((\d{4})\)""").find(title)?.groupValues?.get(1)?.toIntOrNull()
+
+        return newMovieLoadResponse(title, url, TvType.Movie, url) {
+            this.posterUrl = poster
+            this.plot = plot
+            this.year = year
+        }
+    }
+
+    // ---------- link extraction ----------
+
+    private val urlRegex = Regex("""https?://[^\s"'<>\\)]+""")
+    private val skipExt = listOf(".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
+        ".css", ".js", ".ico", ".woff", ".woff2", ".ttf")
+    private val skipHost = listOf("google", "gstatic", "facebook", "twitter", "w3.org",
+        "schema.org", "cloudflare", "whatsapp", "t.me", "telegram", "instagram")
+    private val embedHint = Regex("ajax|embed|player|server|stream|api|source|watch", RegexOption.IGNORE_CASE)
+
+    private fun collectUrls(text: String, out: MutableSet<String>) {
+        val clean = text.replace("\\/", "/").replace("&amp;", "&")
+        urlRegex.findAll(clean).forEach { out.add(it.value.trimEnd(',', ';', '\\', '.')) }
+    }
+
+    private fun tryBase64(s: String): String? {
+        if (s.length < 16 || !s.matches(Regex("^[A-Za-z0-9+/=_-]+$"))) return null
+        return try {
+            val fixed = s.replace('-', '+').replace('_', '/')
+            String(Base64.decode(fixed, Base64.DEFAULT))
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun isUseful(u: String): Boolean {
+        if (u.startsWith("magnet")) return false
+        val path = u.substringBefore('?').lowercase()
+        if (skipExt.any { path.endsWith(it) }) return false
+        if (skipHost.any { u.contains(it, true) }) return false
+        return true
     }
 
     override suspend fun loadLinks(
@@ -76,37 +124,61 @@ class TeluguProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val document = app.get(data, referer = mainUrl).document
-        val candidates = linkedSetOf<String>()
+        val res = app.get(data, referer = mainUrl, interceptor = cfKiller)
+        val doc = res.document
+        val found = linkedSetOf<String>()
 
-        // 1) iframes (including lazy-loaded ones)
-        document.select("iframe").forEach {
-            val src = it.attr("src").ifBlank { it.attr("data-src") }
-            if (src.isNotBlank()) candidates.add(fixUrl(src))
+        // 1) every attribute of every element (data-src, data-url, data-embed, onclick, ...)
+        doc.allElements.forEach { el ->
+            el.attributes().forEach { attr ->
+                val v = attr.value.trim()
+                when {
+                    v.startsWith("http") -> found.add(v)
+                    v.startsWith("//") -> found.add("https:$v")
+                    v.contains("http") -> collectUrls(v, found)
+                    else -> tryBase64(v)?.let { d -> if (d.contains("http")) collectUrls(d, found) }
+                }
+            }
         }
-
-        // 2) external anchors (watch-online buttons pointing to video hosts)
-        document.select("a[href]").forEach {
-            val href = it.attr("href")
-            if (href.startsWith("http") &&
-                !href.startsWith(mainUrl) &&
-                !href.startsWith("magnet:") &&
-                !href.endsWith(".torrent")
-            ) candidates.add(href)
-        }
-
-        // 3) URLs hidden inside inline scripts
-        val scriptRegex = Regex("""https?:\\?/\\?/[^\s"'<>\\]+""")
-        document.select("script").forEach { s ->
-            scriptRegex.findAll(s.data()).forEach { m ->
-                candidates.add(m.value.replace("\\/", "/"))
+        // 2) raw HTML + inline scripts (also catches escaped urls)
+        collectUrls(res.text, found)
+        doc.select("script").forEach { s ->
+            collectUrls(s.data(), found)
+            Regex("""["']([A-Za-z0-9+/=_-]{24,})["']""").findAll(s.data()).forEach { m ->
+                tryBase64(m.groupValues[1])?.let { d -> if (d.contains("http")) collectUrls(d, found) }
             }
         }
 
-        var found = false
-        candidates.take(40).forEach { link ->
-            if (loadExtractor(link, subtitleCallback, callback)) found = true
+        val useful = found.filter { isUseful(it) }
+        val internal = useful.filter { it.startsWith(mainUrl) }
+        val external = useful.filter { !it.startsWith(mainUrl) }.toMutableSet()
+
+        // 3) follow same-site embed / ajax endpoints once and harvest their urls
+        internal
+            .filter { embedHint.containsMatchIn(it) && !it.contains("/category/") && !it.endsWith(".html") }
+            .take(8)
+            .forEach { u ->
+                try {
+                    val r = app.get(
+                        u,
+                        referer = data,
+                        headers = mapOf("X-Requested-With" to "XMLHttpRequest"),
+                        interceptor = cfKiller
+                    )
+                    val sub = linkedSetOf<String>()
+                    collectUrls(r.text, sub)
+                    sub.filter { isUseful(it) && !it.startsWith(mainUrl) }.forEach { external.add(it) }
+                } catch (_: Exception) {
+                }
+            }
+
+        var ok = false
+        external.take(50).forEach { link ->
+            try {
+                if (loadExtractor(link, data, subtitleCallback, callback)) ok = true
+            } catch (_: Exception) {
+            }
         }
-        return found
+        return ok
     }
 }
