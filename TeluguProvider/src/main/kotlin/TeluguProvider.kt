@@ -1,4 +1,4 @@
-package com.shekar.telugu
+package recloudstream
 
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
@@ -22,9 +22,7 @@ class TeluguProvider : MainAPI() {
         request: MainPageRequest
     ): HomePageResponse {
         val document = app.get(request.data).document
-        
-        // Checks for both common MovieRulz HTML layouts
-        val elements = document.select("div.cont_display, div.content div.box")
+        val elements = document.select("div.content div.item, div.cont_display, div.movies-list div.item")
         val home = elements.mapNotNull { it.toSearchResult() }
         
         return newHomePageResponse(request.name, home)
@@ -32,7 +30,7 @@ class TeluguProvider : MainAPI() {
 
     private fun Element.toSearchResult(): SearchResponse? {
         val link = this.selectFirst("a") ?: return null
-        val title = link.attr("title").ifEmpty { link.text() }
+        val title = link.attr("title").ifEmpty { this.selectFirst("a img")?.attr("alt") ?: link.text() }
         val href = fixUrl(link.attr("href"))
         val posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
 
@@ -45,12 +43,35 @@ class TeluguProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val document = app.get("$mainUrl/?s=$query").document
-        val elements = document.select("div.cont_display, div.content div.box")
+        val elements = document.select("div.content div.item, div.cont_display, div.movies-list div.item")
         
         return elements.mapNotNull { it.toSearchResult() }
     }
 
     override suspend fun load(url: String): LoadResponse {
-        throw NotImplementedError("We will build the movie details next!")
+        val document = app.get(url).document
+
+        val title = document.selectFirst("h2")?.text() ?: "Movie"
+        val poster = fixUrlNull(document.selectFirst("div.post-thumbnail img, .entry-content img")?.attr("src"))
+        val description = document.selectFirst("div.entry-content p")?.text()
+
+        // Find the embedded player iframe or watch link
+        val playerUrl = document.selectFirst("iframe")?.attr("src") ?: url
+
+        return newMovieLoadResponse(title, url, TvType.Movie, playerUrl) {
+            posterUrl = poster
+            plot = description
+        }
+    }
+
+    override suspend fun loadLinks(
+        data: String,
+        isCasting: Boolean,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        // Automatically extracts streams from supported embedded video players
+        loadExtractor(data, subtitleCallback, callback)
+        return true
     }
 }
