@@ -1,4 +1,4 @@
-package recloudstream
+package com.shekar.telugu
 
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
@@ -54,8 +54,6 @@ class TeluguProvider : MainAPI() {
         val title = document.selectFirst("h2")?.text() ?: "Movie"
         val poster = fixUrlNull(document.selectFirst("div.post-thumbnail img, .entry-content img")?.attr("src"))
         val description = document.selectFirst("div.entry-content p")?.text()
-
-        // Find the embedded player iframe or watch link
         val playerUrl = document.selectFirst("iframe")?.attr("src") ?: url
 
         return newMovieLoadResponse(title, url, TvType.Movie, playerUrl) {
@@ -70,7 +68,6 @@ class TeluguProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        // Automatically extracts streams from supported embedded video players
         loadExtractor(data, subtitleCallback, callback)
         return true
     }
