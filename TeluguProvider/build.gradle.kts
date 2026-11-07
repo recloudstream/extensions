@@ -1,11 +1,13 @@
 plugins {
+    id("com.android.library")
+    id("kotlin-android")
     id("cloudstream.plugin")
 }
 
 cloudstream {
-    authors.set(listOf("Shekar"))
-    name.set("Telugu Provider")
-    description.set("Custom Telugu movie provider")
-    language.set("te")
-    version.set(1)
+    setAuthor("Shekar")
+    description = "Telugu movies and series provider"
+    language = "te"
+    tvTypes = listOf("Movie")
+    version = 1
 }
