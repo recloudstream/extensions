@@ -1,9 +1,4 @@
-plugins {
-    id("com.android.library")
-    kotlin("android")
-}
-
-version = 1
+version = 2
 
 cloudstream {
     description = "MovieRulz Telugu Provider"
