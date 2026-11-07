@@ -1,8 +1,8 @@
 {
-    "name": "Cloudstream providers repository",
-    "description": "Cloudstream extension Repository",
+    "name": "Chandu Extensions",
+    "description": "My Custom CloudStream Extensions",
     "manifestVersion": 1,
     "pluginLists": [
-      "https://raw.githubusercontent.com/recloudstream/extensions/builds/plugins.json"
+      "https://raw.githubusercontent.com/chandureddy143/extensions/builds/plugins.json"
     ]
 }
