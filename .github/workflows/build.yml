@@ -1,6 +1,5 @@
 name: Build
 
-# https://docs.github.com/en/actions/learn-github-actions/workflow-syntax-for-github-actions#concurrency
 concurrency: 
   group: "build"
   cancel-in-progress: true
@@ -9,7 +8,6 @@ on:
   workflow_dispatch:
   push:
     branches:
-      # choose your default branch
       - master
       - main
     paths-ignore:
@@ -32,8 +30,8 @@ jobs:
       
       - name: Clean old builds
         run: |
-          rm $GITHUB_WORKSPACE/builds/*.cs3 || true
-          rm $GITHUB_WORKSPACE/builds/*.jar || true
+          rm -f $GITHUB_WORKSPACE/builds/*.cs3 || true
+          rm -f $GITHUB_WORKSPACE/builds/*.jar || true
 
       - name: Setup JDK 17
         uses: actions/setup-java@v1
@@ -41,7 +39,9 @@ jobs:
           java-version: 17
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v2
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools build-tools;34.0.0 platforms;android-34'
 
       - name: Build Plugins
         run: |
@@ -49,9 +49,9 @@ jobs:
           chmod +x gradlew
           ./gradlew make makePluginsJson
           ./gradlew ensureJarCompatibility
-          cp **/build/*.cs3 $GITHUB_WORKSPACE/builds
-          cp **/build/*.jar $GITHUB_WORKSPACE/builds
-          cp build/plugins.json $GITHUB_WORKSPACE/builds
+          cp **/build/*.cs3 $GITHUB_WORKSPACE/builds || true
+          cp **/build/*.jar $GITHUB_WORKSPACE/builds || true
+          cp build/plugins.json $GITHUB_WORKSPACE/builds || true
 
       - name: Push builds
         run: |
@@ -59,5 +59,5 @@ jobs:
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
           git add .
-          git commit --amend -m "Build $GITHUB_SHA" || exit 0   # do not error if nothing to commit
+          git commit --amend -m "Build $GITHUB_SHA" || exit 0
           git push --force
