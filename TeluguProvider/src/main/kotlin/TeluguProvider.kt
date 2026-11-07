@@ -2,7 +2,6 @@ package com.shekar.telugu
 
 import android.util.Base64
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -14,8 +13,6 @@ class TeluguProvider : MainAPI() {
     override val hasMainPage = true
     override var lang = "te"
     override val supportedTypes = setOf(TvType.Movie)
-
-    private val cfKiller = CloudflareKiller()
 
     override val mainPage = mainPageOf(
         "$mainUrl/category/telugu-movies-2026" to "Telugu 2026",
@@ -47,7 +44,7 @@ class TeluguProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (page <= 1) request.data else "${request.data.trimEnd('/')}/page/$page"
-        val doc = app.get(url, referer = mainUrl, interceptor = cfKiller).document
+        val doc = app.get(url, referer = mainUrl).document
         val home = doc.parseCards()
         return newHomePageResponse(request.name, home, hasNext = home.isNotEmpty())
     }
@@ -57,7 +54,7 @@ class TeluguProvider : MainAPI() {
         val patterns = listOf("$mainUrl/?s=$q", "$mainUrl/search?q=$q", "$mainUrl/search/$q")
         for (u in patterns) {
             val results = try {
-                app.get(u, referer = mainUrl, interceptor = cfKiller).document.parseCards()
+                app.get(u, referer = mainUrl).document.parseCards()
             } catch (e: Exception) {
                 emptyList()
             }
@@ -69,7 +66,7 @@ class TeluguProvider : MainAPI() {
     // ---------- details ----------
 
     override suspend fun load(url: String): LoadResponse {
-        val doc = app.get(url, referer = mainUrl, interceptor = cfKiller).document
+        val doc = app.get(url, referer = mainUrl).document
 
         val title = (doc.selectFirst("meta[property=og:title]")?.attr("content")
             ?: doc.selectFirst("h2")?.text() ?: "Movie")
@@ -89,11 +86,16 @@ class TeluguProvider : MainAPI() {
     // ---------- link extraction ----------
 
     private val urlRegex = Regex("""https?://[^\s"'<>\\)]+""")
-    private val skipExt = listOf(".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
-        ".css", ".js", ".ico", ".woff", ".woff2", ".ttf")
-    private val skipHost = listOf("google", "gstatic", "facebook", "twitter", "w3.org",
-        "schema.org", "cloudflare", "whatsapp", "t.me", "telegram", "instagram")
-    private val embedHint = Regex("ajax|embed|player|server|stream|api|source|watch", RegexOption.IGNORE_CASE)
+    private val skipExt = listOf(
+        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
+        ".css", ".js", ".ico", ".woff", ".woff2", ".ttf"
+    )
+    private val skipHost = listOf(
+        "google", "gstatic", "facebook", "twitter", "w3.org",
+        "schema.org", "cloudflare", "whatsapp", "t.me", "telegram", "instagram"
+    )
+    private val embedHint =
+        Regex("ajax|embed|player|server|stream|api|source|watch", RegexOption.IGNORE_CASE)
 
     private fun collectUrls(text: String, out: MutableSet<String>) {
         val clean = text.replace("\\/", "/").replace("&amp;", "&")
@@ -124,7 +126,7 @@ class TeluguProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val res = app.get(data, referer = mainUrl, interceptor = cfKiller)
+        val res = app.get(data, referer = mainUrl)
         val doc = res.document
         val found = linkedSetOf<String>()
 
@@ -136,16 +138,21 @@ class TeluguProvider : MainAPI() {
                     v.startsWith("http") -> found.add(v)
                     v.startsWith("//") -> found.add("https:$v")
                     v.contains("http") -> collectUrls(v, found)
-                    else -> tryBase64(v)?.let { d -> if (d.contains("http")) collectUrls(d, found) }
+                    else -> tryBase64(v)?.let { d ->
+                        if (d.contains("http")) collectUrls(d, found)
+                    }
                 }
             }
         }
-        // 2) raw HTML + inline scripts (also catches escaped urls)
+
+        // 2) raw HTML + inline scripts (also catches escaped / base64 urls)
         collectUrls(res.text, found)
         doc.select("script").forEach { s ->
             collectUrls(s.data(), found)
             Regex("""["']([A-Za-z0-9+/=_-]{24,})["']""").findAll(s.data()).forEach { m ->
-                tryBase64(m.groupValues[1])?.let { d -> if (d.contains("http")) collectUrls(d, found) }
+                tryBase64(m.groupValues[1])?.let { d ->
+                    if (d.contains("http")) collectUrls(d, found)
+                }
             }
         }
 
@@ -162,12 +169,12 @@ class TeluguProvider : MainAPI() {
                     val r = app.get(
                         u,
                         referer = data,
-                        headers = mapOf("X-Requested-With" to "XMLHttpRequest"),
-                        interceptor = cfKiller
+                        headers = mapOf("X-Requested-With" to "XMLHttpRequest")
                     )
                     val sub = linkedSetOf<String>()
                     collectUrls(r.text, sub)
-                    sub.filter { isUseful(it) && !it.startsWith(mainUrl) }.forEach { external.add(it) }
+                    sub.filter { isUseful(it) && !it.startsWith(mainUrl) }
+                        .forEach { external.add(it) }
                 } catch (_: Exception) {
                 }
             }
