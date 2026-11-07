@@ -51,12 +51,16 @@ class TeluguProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
 
-        val title = document.selectFirst("h2")?.text() ?: "Movie"
-        val poster = fixUrlNull(document.selectFirst("div.post-thumbnail img, .entry-content img")?.attr("src"))
-        val description = document.selectFirst("div.entry-content p")?.text()
-        val playerUrl = document.selectFirst("iframe")?.attr("src") ?: url
+        val title = document.selectFirst("h1, h2")?.text() ?: "Movie"
+        val poster = fixUrlNull(document.selectFirst("div.post-thumbnail img, .entry-content img, .dt-poster img")?.attr("src"))
+        val description = document.selectFirst("div.entry-content p, .sinfo p")?.text()
+        
+        // Target the iframe where the video player is embedded
+        val iframeUrl = document.selectFirst("iframe")?.attr("src") 
+            ?: document.selectFirst("div.player iframe")?.attr("src") 
+            ?: url
 
-        return newMovieLoadResponse(title, url, TvType.Movie, playerUrl) {
+        return newMovieLoadResponse(title, url, TvType.Movie, fixUrl(iframeUrl)) {
             posterUrl = poster
             plot = description
         }
@@ -68,6 +72,7 @@ class TeluguProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        // Automatically resolves video links from standard embedded hosts
         loadExtractor(data, subtitleCallback, callback)
         return true
     }
