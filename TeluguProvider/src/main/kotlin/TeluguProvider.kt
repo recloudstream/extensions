@@ -5,8 +5,7 @@ import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Element
 
 class TeluguProvider : MainAPI() {
-    // ⚠️ UPDATE THIS DOMAIN if it stops working! Examples: .red, .social, .recipes
-    override var mainUrl = "https://www.5movierulz.red" 
+    override var mainUrl = "https://www.5movierulz.supplies"
     override var name = "MovieRulz Telugu"
     override val hasMainPage = true
     override var lang = "te"
@@ -24,10 +23,9 @@ class TeluguProvider : MainAPI() {
     ): HomePageResponse {
         val document = app.get(request.data).document
         
-        // Updated HTML selector: MovieRulz uses "div.cont_display"
-        val home = document.select("div.cont_display").mapNotNull {
-            it.toSearchResult()
-        }
+        // Checks for both common MovieRulz HTML layouts
+        val elements = document.select("div.cont_display, div.content div.box")
+        val home = elements.mapNotNull { it.toSearchResult() }
         
         return newHomePageResponse(request.name, home)
     }
@@ -47,10 +45,9 @@ class TeluguProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val document = app.get("$mainUrl/?s=$query").document
+        val elements = document.select("div.cont_display, div.content div.box")
         
-        return document.select("div.cont_display").mapNotNull {
-            it.toSearchResult()
-        }
+        return elements.mapNotNull { it.toSearchResult() }
     }
 
     override suspend fun load(url: String): LoadResponse {
