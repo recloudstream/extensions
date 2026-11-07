@@ -5,13 +5,13 @@ import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Element
 
 class TeluguProvider : MainAPI() {
-    override var mainUrl = "https://www.5movierulz.supplies"
+    // ⚠️ UPDATE THIS DOMAIN if it stops working! Examples: .red, .social, .recipes
+    override var mainUrl = "https://www.5movierulz.red" 
     override var name = "MovieRulz Telugu"
     override val hasMainPage = true
     override var lang = "te"
     override val supportedTypes = setOf(TvType.Movie)
 
-    // Defines the tabs on the home screen
     override val mainPage = mainPageOf(
         "$mainUrl/category/telugu-movies-2024/" to "Telugu 2024",
         "$mainUrl/category/telugu-movies-2023/" to "Telugu 2023",
@@ -22,11 +22,10 @@ class TeluguProvider : MainAPI() {
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
-        // Fetches the HTML from the website
         val document = app.get(request.data).document
         
-        // Scrapes the movie boxes
-        val home = document.select("div.content div.box").mapNotNull {
+        // Updated HTML selector: MovieRulz uses "div.cont_display"
+        val home = document.select("div.cont_display").mapNotNull {
             it.toSearchResult()
         }
         
@@ -34,9 +33,12 @@ class TeluguProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val title = this.selectFirst("a")?.attr("title") ?: return null
-        val href = fixUrl(this.selectFirst("a")?.attr("href") ?: return null)
+        val link = this.selectFirst("a") ?: return null
+        val title = link.attr("title").ifEmpty { link.text() }
+        val href = fixUrl(link.attr("href"))
         val posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
+
+        if (title.isEmpty() || href.isEmpty()) return null
 
         return newMovieSearchResponse(title, href, TvType.Movie) {
             this.posterUrl = posterUrl
@@ -46,12 +48,12 @@ class TeluguProvider : MainAPI() {
     override suspend fun search(query: String): List<SearchResponse> {
         val document = app.get("$mainUrl/?s=$query").document
         
-        return document.select("div.content div.box").mapNotNull {
+        return document.select("div.cont_display").mapNotNull {
             it.toSearchResult()
         }
     }
 
     override suspend fun load(url: String): LoadResponse {
-        throw NotImplementedError("We will build the movie details and streaming links next!")
+        throw NotImplementedError("We will build the movie details next!")
     }
 }
