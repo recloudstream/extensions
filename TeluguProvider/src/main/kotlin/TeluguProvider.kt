@@ -54,7 +54,7 @@ class TeluguProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val q = URLEncoder.encode(query, "UTF-8")
-        val patterns = listOf("$mainUrl/?s=$q", "$mainUrl/search?q=$q", "$mainUrl/search/$q")
+        val patterns = listOf("$mainUrl/search_movies?s=$q", "$mainUrl/?s=$q")
         for (u in patterns) {
             val results = try {
                 app.get(u, referer = mainUrl).document.parseCards()
@@ -88,6 +88,7 @@ class TeluguProvider : MainAPI() {
 
     // ---------- link extraction ----------
 
+    private val whitespace = Regex("\\s+")
     private val urlRegex = Regex("""https?://[^\s"'<>\\)]+""")
     private val skipExt = listOf(
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
@@ -96,7 +97,8 @@ class TeluguProvider : MainAPI() {
     private val skipHost = listOf(
         "googleapis", "google-analytics", "googletagmanager", "gstatic",
         "facebook", "twitter", "w3.org", "schema.org",
-        "cdnjs.cloudflare.com", "whatsapp", "t.me", "telegram", "instagram"
+        "cdnjs.cloudflare.com", "whatsapp", "//t.me", "telegram", "instagram",
+        "cloudflareinsights", "acscdn.com"
     )
     private val embedHint =
         Regex("ajax|embed|player|server|stream|api|source|watch", RegexOption.IGNORE_CASE)
@@ -160,32 +162,44 @@ class TeluguProvider : MainAPI() {
     ): Boolean {
         val res = app.get(data, referer = mainUrl)
         val doc = res.document
-        val found = linkedSetOf<String>()
+        val rawFound = linkedSetOf<String>()
+
+        // 0) the site's own server buttons (their links contain a line break inside)
+        doc.select("a.stream-link-btn").forEach { a ->
+            val h = a.attr("href").replace(whitespace, "")
+            if (h.startsWith("http")) rawFound.add(h)
+        }
 
         // 1) every attribute of every element (data-src, data-url, data-embed, onclick, ...)
         doc.allElements.forEach { el ->
             el.attributes().forEach { attr ->
                 val v = attr.value.trim()
                 when {
-                    v.startsWith("http") -> found.add(v)
-                    v.startsWith("//") -> found.add("https:$v")
-                    v.contains("http") -> collectUrls(v, found)
+                    v.startsWith("http") -> rawFound.add(v)
+                    v.startsWith("//") -> rawFound.add("https:$v")
+                    v.contains("http") -> collectUrls(v, rawFound)
                     else -> tryBase64(v)?.let { d ->
-                        if (d.contains("http")) collectUrls(d, found)
+                        if (d.contains("http")) collectUrls(d, rawFound)
                     }
                 }
             }
         }
 
         // 2) raw HTML + inline scripts (also catches escaped / base64 urls)
-        collectUrls(res.text, found)
+        collectUrls(res.text, rawFound)
         doc.select("script").forEach { s ->
-            collectUrls(s.data(), found)
+            collectUrls(s.data(), rawFound)
             Regex("""["']([A-Za-z0-9+/=_-]{24,})["']""").findAll(s.data()).forEach { m ->
                 tryBase64(m.groupValues[1])?.let { d ->
-                    if (d.contains("http")) collectUrls(d, found)
+                    if (d.contains("http")) collectUrls(d, rawFound)
                 }
             }
+        }
+
+        // 3) remove line breaks / spaces inside links, then drop cut-off copies
+        val cleaned = rawFound.map { it.replace(whitespace, "") }.toSet()
+        val found = cleaned.filter { u ->
+            cleaned.none { o -> o != u && o.startsWith(u) }
         }
 
         Log.d(tag, "page=${res.url} status=${res.code} found=${found.size}")
@@ -195,7 +209,7 @@ class TeluguProvider : MainAPI() {
         val internal = useful.filter { it.startsWith(mainUrl) }
         val external = useful.filter { !it.startsWith(mainUrl) }.toMutableSet()
 
-        // 3) follow same-site embed / ajax endpoints once and harvest their urls
+        // 4) follow same-site embed / ajax endpoints once and harvest their urls
         internal
             .filter { embedHint.containsMatchIn(it) && !it.contains("/category/") && !it.endsWith(".html") }
             .take(8)
@@ -208,7 +222,8 @@ class TeluguProvider : MainAPI() {
                     )
                     val sub = linkedSetOf<String>()
                     collectUrls(r.text, sub)
-                    sub.filter { isUseful(it) && !it.startsWith(mainUrl) }
+                    sub.map { it.replace(whitespace, "") }
+                        .filter { isUseful(it) && !it.startsWith(mainUrl) }
                         .forEach { external.add(it) }
                 } catch (_: Exception) {
                 }
