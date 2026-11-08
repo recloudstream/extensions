@@ -5,11 +5,15 @@ import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.nicehttp.NiceResponse
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 
 class TeluguProvider : MainAPI() {
+    // If the site changes its address, change ONLY this line.
     override var mainUrl = "https://www.5movierulz.supplies"
     override var name = "MovieRulz Telugu"
     override val hasMainPage = true
@@ -50,7 +54,8 @@ class TeluguProvider : MainAPI() {
         val url = if (page <= 1) request.data else "${request.data.trimEnd('/')}/page/$page"
         val doc = app.get(url, referer = mainUrl).document
         val home = doc.parseCards()
-        return newHomePageResponse(request.name, home, hasNext = home.isNotEmpty())
+        // page < 20 stops endless paging if the site repeats the last page
+        return newHomePageResponse(request.name, home, hasNext = home.isNotEmpty() && page < 20)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -59,6 +64,8 @@ class TeluguProvider : MainAPI() {
         for (u in patterns) {
             val results = try {
                 app.get(u, referer = mainUrl).document.parseCards()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 emptyList()
             }
@@ -89,8 +96,14 @@ class TeluguProvider : MainAPI() {
 
     // ---------- link extraction ----------
 
+    // Settings you can tweak
+    private val extractTimeoutMs = 15_000L   // max time spent on ONE video host
+    private val maxLinks = 25                // max hosts tried per movie
+
     private val whitespace = Regex("\\s+")
     private val urlRegex = Regex("""https?://[^\s"'<>\\)]+""")
+    private val base64Chars = Regex("^[A-Za-z0-9+/=_-]+$")
+    private val base64InScript = Regex("""["']([A-Za-z0-9+/=_-]{24,})["']""")
     private val skipExt = listOf(
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
         ".css", ".js", ".ico", ".woff", ".woff2", ".ttf"
@@ -113,7 +126,7 @@ class TeluguProvider : MainAPI() {
     }
 
     private fun tryBase64(s: String): String? {
-        if (s.length < 16 || !s.matches(Regex("^[A-Za-z0-9+/=_-]+$"))) return null
+        if (s.length < 16 || !s.matches(base64Chars)) return null
         return try {
             val fixed = s.replace('-', '+').replace('_', '/')
             String(Base64.decode(fixed, Base64.DEFAULT))
@@ -136,13 +149,11 @@ class TeluguProvider : MainAPI() {
         return when {
             link.contains("hglink.to") -> listOf(
                 "https://streamwish.to/e/$id",
-                "https://hlswish.com/e/$id",
-                "https://swiftplayers.com/e/$id"
+                "https://hlswish.com/e/$id"
             )
             link.contains("minochinos") -> listOf(
                 "https://filelions.to/v/$id",
-                "https://vidhide.com/v/$id",
-                "https://dhcplay.com/v/$id"
+                "https://vidhide.com/v/$id"
             )
             else -> emptyList()
         }
@@ -156,7 +167,7 @@ class TeluguProvider : MainAPI() {
     ): Boolean {
         var ok = false
         try {
-            val text = app.get(link, referer = referer).text.replace("\\/", "/")
+            val text = app.get(link, referer = referer, timeout = 10L).text.replace("\\/", "/")
             mediaRegex.findAll(text).map { it.value }.distinct().forEach { m ->
                 val isM3u8 = m.contains(".m3u8")
                 callback(
@@ -168,15 +179,41 @@ class TeluguProvider : MainAPI() {
                 )
                 ok = true
             }
-        } catch (_: Exception) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(tag, "fallback failed for $link : ${e.javaClass.simpleName}")
         }
         return ok
     }
 
-    private suspend fun debugLink(info: String): ExtractorLink {
-        return newExtractorLink(name, info, "https://example.com/debug.m3u8") {
-            this.type = ExtractorLinkType.M3U8
-            this.quality = Qualities.Unknown.value
+    // Try ONE host: built-in extractor, then fallback, then alternate addresses.
+    // Gives up after extractTimeoutMs so a blocked/dead host cannot stall everything.
+    private suspend fun extractOne(
+        link: String,
+        referer: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        return try {
+            withTimeoutOrNull(extractTimeoutMs) {
+                var hit = loadExtractor(link, referer, subtitleCallback, callback)
+                if (!hit) hit = fallbackExtract(link, referer, callback)
+                if (!hit) {
+                    for (alt in alternates(link)) {
+                        if (loadExtractor(alt, referer, subtitleCallback, callback)) {
+                            hit = true
+                            break
+                        }
+                    }
+                }
+                hit
+            } ?: false
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(tag, "extract failed for $link : ${e.javaClass.simpleName}")
+            false
         }
     }
 
@@ -186,29 +223,22 @@ class TeluguProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        // Open the movie page, up to 3 tries (the site is sometimes slow or refuses)
+        // Open the movie page, up to 3 tries with a short pause in between
         var res: NiceResponse? = null
-        var err = ""
         for (i in 1..3) {
             try {
                 val r = app.get(data, referer = mainUrl, timeout = 30L)
                 res = r
-                if (r.code == 200 && r.text.contains("stream-link-btn")) {
-                    err = ""
-                    break
-                }
-                err = "try$i status=${r.code} len=${r.text.length}"
+                if (r.code == 200 && r.text.contains("stream-link-btn")) break
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                err = "try$i " + e.javaClass.simpleName + ":" + (e.message ?: "").take(60)
+                Log.w(tag, "page try$i failed: ${e.javaClass.simpleName}")
             }
+            delay(1500)
         }
 
-        if (res == null) {
-            callback(debugLink("DEBUG page failed $err"))
-            return true
-        }
-        val page = res
-
+        val page = res ?: return false
         val doc = page.document
         val rawFound = linkedSetOf<String>()
 
@@ -237,7 +267,7 @@ class TeluguProvider : MainAPI() {
         collectUrls(page.text, rawFound)
         doc.select("script").forEach { s ->
             collectUrls(s.data(), rawFound)
-            Regex("""["']([A-Za-z0-9+/=_-]{24,})["']""").findAll(s.data()).forEach { m ->
+            base64InScript.findAll(s.data()).forEach { m ->
                 tryBase64(m.groupValues[1])?.let { d ->
                     if (d.contains("http")) collectUrls(d, rawFound)
                 }
@@ -251,7 +281,6 @@ class TeluguProvider : MainAPI() {
         }
 
         Log.d(tag, "page=${page.url} status=${page.code} found=${found.size}")
-        found.forEach { Log.d(tag, "found: $it") }
 
         val useful = found.filter { isUseful(it) }
         val internal = useful.filter { it.startsWith(mainUrl) }
@@ -266,48 +295,29 @@ class TeluguProvider : MainAPI() {
                     val r = app.get(
                         u,
                         referer = data,
-                        headers = mapOf("X-Requested-With" to "XMLHttpRequest")
+                        headers = mapOf("X-Requested-With" to "XMLHttpRequest"),
+                        timeout = 10L
                     )
                     val sub = linkedSetOf<String>()
                     collectUrls(r.text, sub)
                     sub.map { it.replace(whitespace, "") }
                         .filter { isUseful(it) && !it.startsWith(mainUrl) }
                         .forEach { external.add(it) }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) {
                 }
             }
 
-        Log.d(tag, "useful=${useful.size} external=${external.size}")
-        external.forEach { Log.d(tag, "ext: $it") }
+        val hosts = external.map { it.substringAfter("//").substringBefore("/") }.distinct()
+        Log.d(tag, "external=${external.size} hosts=$hosts")
 
-        var ok = false
-        external.take(50).forEach { link ->
-            try {
-                var hit = loadExtractor(link, data, subtitleCallback, callback)
-                if (!hit) hit = fallbackExtract(link, data, callback)
-                if (!hit) {
-                    for (alt in alternates(link)) {
-                        if (loadExtractor(alt, data, subtitleCallback, callback)) {
-                            hit = true
-                            break
-                        }
-                    }
-                }
-                if (hit) ok = true
-            } catch (_: Exception) {
-            }
+        // 5) try all hosts AT THE SAME TIME (amap = run in parallel)
+        val results = external.take(maxLinks).toList().amap { link ->
+            extractOne(link, data, subtitleCallback, callback)
         }
+        val ok = results.any { it }
         Log.d(tag, "final ok=$ok")
-
-        if (!ok) {
-            val hosts = external.map { it.substringAfter("//").substringBefore("/") }
-                .distinct().joinToString(",")
-            val info = "DEBUG status=${page.code} len=${page.text.length} " +
-                "btn=${page.text.contains("stream-link-btn")} " +
-                "found=${found.size} ext=${external.size} hosts=$hosts $err"
-            callback(debugLink(info))
-            return true
-        }
         return ok
     }
 }
