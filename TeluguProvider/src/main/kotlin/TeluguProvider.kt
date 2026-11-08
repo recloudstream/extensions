@@ -3,7 +3,6 @@ package com.shekar.telugu
 import android.util.Base64
 import android.util.Log
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -16,7 +15,6 @@ class TeluguProvider : MainAPI() {
     override var lang = "te"
     override val supportedTypes = setOf(TvType.Movie)
 
-    private val cfKiller = CloudflareKiller()
     private val tag = "TeluguDbg"
 
     override val mainPage = mainPageOf(
@@ -49,7 +47,7 @@ class TeluguProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (page <= 1) request.data else "${request.data.trimEnd('/')}/page/$page"
-        val doc = app.get(url, referer = mainUrl, interceptor = cfKiller).document
+        val doc = app.get(url, referer = mainUrl).document
         val home = doc.parseCards()
         return newHomePageResponse(request.name, home, hasNext = home.isNotEmpty())
     }
@@ -59,7 +57,7 @@ class TeluguProvider : MainAPI() {
         val patterns = listOf("$mainUrl/?s=$q", "$mainUrl/search?q=$q", "$mainUrl/search/$q")
         for (u in patterns) {
             val results = try {
-                app.get(u, referer = mainUrl, interceptor = cfKiller).document.parseCards()
+                app.get(u, referer = mainUrl).document.parseCards()
             } catch (e: Exception) {
                 emptyList()
             }
@@ -71,7 +69,7 @@ class TeluguProvider : MainAPI() {
     // ---------- details ----------
 
     override suspend fun load(url: String): LoadResponse {
-        val doc = app.get(url, referer = mainUrl, interceptor = cfKiller).document
+        val doc = app.get(url, referer = mainUrl).document
 
         val title = (doc.selectFirst("meta[property=og:title]")?.attr("content")
             ?: doc.selectFirst("h2")?.text() ?: "Movie")
@@ -160,7 +158,7 @@ class TeluguProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val res = app.get(data, referer = mainUrl, interceptor = cfKiller)
+        val res = app.get(data, referer = mainUrl)
         val doc = res.document
         val found = linkedSetOf<String>()
 
@@ -206,8 +204,7 @@ class TeluguProvider : MainAPI() {
                     val r = app.get(
                         u,
                         referer = data,
-                        headers = mapOf("X-Requested-With" to "XMLHttpRequest"),
-                        interceptor = cfKiller
+                        headers = mapOf("X-Requested-With" to "XMLHttpRequest")
                     )
                     val sub = linkedSetOf<String>()
                     collectUrls(r.text, sub)
