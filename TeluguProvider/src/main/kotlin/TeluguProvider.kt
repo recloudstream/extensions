@@ -5,7 +5,6 @@ import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.nicehttp.NiceResponse
-import kotlinx.coroutines.delay
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
@@ -174,7 +173,7 @@ class TeluguProvider : MainAPI() {
         return ok
     }
 
-    private fun debugLink(info: String): ExtractorLink {
+    private suspend fun debugLink(info: String): ExtractorLink {
         return newExtractorLink(name, info, "https://example.com/debug.m3u8") {
             this.type = ExtractorLinkType.M3U8
             this.quality = Qualities.Unknown.value
@@ -202,7 +201,6 @@ class TeluguProvider : MainAPI() {
             } catch (e: Exception) {
                 err = "try$i " + e.javaClass.simpleName + ":" + (e.message ?: "").take(60)
             }
-            delay(1500)
         }
 
         if (res == null) {
