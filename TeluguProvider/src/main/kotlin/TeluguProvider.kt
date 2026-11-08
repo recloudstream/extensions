@@ -5,9 +5,7 @@ import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.nicehttp.NiceResponse
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.cancellation.CancellationException
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
@@ -97,7 +95,6 @@ class TeluguProvider : MainAPI() {
     // ---------- link extraction ----------
 
     // Settings you can tweak
-    private val extractTimeoutMs = 15_000L   // max time spent on ONE video host
     private val maxLinks = 25                // max hosts tried per movie
 
     private val whitespace = Regex("\\s+")
@@ -188,7 +185,7 @@ class TeluguProvider : MainAPI() {
     }
 
     // Try ONE host: built-in extractor, then fallback, then alternate addresses.
-    // Gives up after extractTimeoutMs so a blocked/dead host cannot stall everything.
+    // Errors on one dead host are caught so they cannot stop the others.
     private suspend fun extractOne(
         link: String,
         referer: String,
@@ -196,19 +193,17 @@ class TeluguProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         return try {
-            withTimeoutOrNull(extractTimeoutMs) {
-                var hit = loadExtractor(link, referer, subtitleCallback, callback)
-                if (!hit) hit = fallbackExtract(link, referer, callback)
-                if (!hit) {
-                    for (alt in alternates(link)) {
-                        if (loadExtractor(alt, referer, subtitleCallback, callback)) {
-                            hit = true
-                            break
-                        }
+            var hit = loadExtractor(link, referer, subtitleCallback, callback)
+            if (!hit) hit = fallbackExtract(link, referer, callback)
+            if (!hit) {
+                for (alt in alternates(link)) {
+                    if (loadExtractor(alt, referer, subtitleCallback, callback)) {
+                        hit = true
+                        break
                     }
                 }
-                hit
-            } ?: false
+            }
+            hit
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -235,7 +230,6 @@ class TeluguProvider : MainAPI() {
             } catch (e: Exception) {
                 Log.w(tag, "page try$i failed: ${e.javaClass.simpleName}")
             }
-            delay(1500)
         }
 
         val page = res ?: return false
