@@ -13,8 +13,7 @@ buildscript {
 
     dependencies {
         classpath("com.android.tools.build:gradle:8.7.3")
-        // Cloudstream gradle plugin with master-SNAPSHOT to prevent resolution failures
-        classpath("com.github.recloudstream:gradle:master-SNAPSHOT")
+        classpath("com.github.recloudstream:gradle:-SNAPSHOT")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0")
     }
 }
@@ -71,7 +70,7 @@ subprojects {
     dependencies {
         val implementation by configurations
 
-        implementation("com.github.recloudstream.cloudstream:library:master-SNAPSHOT")
+        implementation("com.github.recloudstream.cloudstream:library:-SNAPSHOT")
 
         // These dependencies can include any of those which are added by the app,
         // but you don't need to include any of them if you don't need them.
