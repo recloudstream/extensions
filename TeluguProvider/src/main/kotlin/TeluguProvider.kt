@@ -1,7 +1,9 @@
 package com.shekar.telugu
 
 import android.util.Base64
+import android.util.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -13,6 +15,9 @@ class TeluguProvider : MainAPI() {
     override val hasMainPage = true
     override var lang = "te"
     override val supportedTypes = setOf(TvType.Movie)
+
+    private val cfKiller = CloudflareKiller()
+    private val tag = "TeluguDbg"
 
     override val mainPage = mainPageOf(
         "$mainUrl/category/telugu-movies-2026" to "Telugu 2026",
@@ -44,7 +49,7 @@ class TeluguProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (page <= 1) request.data else "${request.data.trimEnd('/')}/page/$page"
-        val doc = app.get(url, referer = mainUrl).document
+        val doc = app.get(url, referer = mainUrl, interceptor = cfKiller).document
         val home = doc.parseCards()
         return newHomePageResponse(request.name, home, hasNext = home.isNotEmpty())
     }
@@ -54,7 +59,7 @@ class TeluguProvider : MainAPI() {
         val patterns = listOf("$mainUrl/?s=$q", "$mainUrl/search?q=$q", "$mainUrl/search/$q")
         for (u in patterns) {
             val results = try {
-                app.get(u, referer = mainUrl).document.parseCards()
+                app.get(u, referer = mainUrl, interceptor = cfKiller).document.parseCards()
             } catch (e: Exception) {
                 emptyList()
             }
@@ -66,7 +71,7 @@ class TeluguProvider : MainAPI() {
     // ---------- details ----------
 
     override suspend fun load(url: String): LoadResponse {
-        val doc = app.get(url, referer = mainUrl).document
+        val doc = app.get(url, referer = mainUrl, interceptor = cfKiller).document
 
         val title = (doc.selectFirst("meta[property=og:title]")?.attr("content")
             ?: doc.selectFirst("h2")?.text() ?: "Movie")
@@ -91,11 +96,15 @@ class TeluguProvider : MainAPI() {
         ".css", ".js", ".ico", ".woff", ".woff2", ".ttf"
     )
     private val skipHost = listOf(
-        "google", "gstatic", "facebook", "twitter", "w3.org",
-        "schema.org", "cloudflare", "whatsapp", "t.me", "telegram", "instagram"
+        "googleapis", "google-analytics", "googletagmanager", "gstatic",
+        "facebook", "twitter", "w3.org", "schema.org",
+        "cdnjs.cloudflare.com", "whatsapp", "t.me", "telegram", "instagram"
     )
     private val embedHint =
         Regex("ajax|embed|player|server|stream|api|source|watch", RegexOption.IGNORE_CASE)
+
+    private val mediaRegex =
+        Regex("""https?://[^\s"'<>\\]+?\.(m3u8|mp4)[^\s"'<>\\]*""")
 
     private fun collectUrls(text: String, out: MutableSet<String>) {
         val clean = text.replace("\\/", "/").replace("&amp;", "&")
@@ -120,13 +129,38 @@ class TeluguProvider : MainAPI() {
         return true
     }
 
+    // Used when Cloudstream has no built-in extractor for a video host
+    private suspend fun fallbackExtract(
+        link: String,
+        referer: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        var ok = false
+        try {
+            val text = app.get(link, referer = referer).text.replace("\\/", "/")
+            mediaRegex.findAll(text).map { it.value }.distinct().forEach { m ->
+                val isM3u8 = m.contains(".m3u8")
+                callback(
+                    newExtractorLink(name, name, m) {
+                        this.type = if (isM3u8) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                        this.referer = link
+                        this.quality = Qualities.Unknown.value
+                    }
+                )
+                ok = true
+            }
+        } catch (_: Exception) {
+        }
+        return ok
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val res = app.get(data, referer = mainUrl)
+        val res = app.get(data, referer = mainUrl, interceptor = cfKiller)
         val doc = res.document
         val found = linkedSetOf<String>()
 
@@ -156,6 +190,9 @@ class TeluguProvider : MainAPI() {
             }
         }
 
+        Log.d(tag, "page=${res.url} status=${res.code} found=${found.size}")
+        found.forEach { Log.d(tag, "found: $it") }
+
         val useful = found.filter { isUseful(it) }
         val internal = useful.filter { it.startsWith(mainUrl) }
         val external = useful.filter { !it.startsWith(mainUrl) }.toMutableSet()
@@ -169,7 +206,8 @@ class TeluguProvider : MainAPI() {
                     val r = app.get(
                         u,
                         referer = data,
-                        headers = mapOf("X-Requested-With" to "XMLHttpRequest")
+                        headers = mapOf("X-Requested-With" to "XMLHttpRequest"),
+                        interceptor = cfKiller
                     )
                     val sub = linkedSetOf<String>()
                     collectUrls(r.text, sub)
@@ -179,13 +217,22 @@ class TeluguProvider : MainAPI() {
                 }
             }
 
+        Log.d(tag, "useful=${useful.size} external=${external.size}")
+        external.forEach { Log.d(tag, "ext: $it") }
+
         var ok = false
         external.take(50).forEach { link ->
             try {
-                if (loadExtractor(link, data, subtitleCallback, callback)) ok = true
+                val hit = loadExtractor(link, data, subtitleCallback, callback)
+                if (hit) {
+                    ok = true
+                } else if (fallbackExtract(link, data, callback)) {
+                    ok = true
+                }
             } catch (_: Exception) {
             }
         }
+        Log.d(tag, "final ok=$ok")
         return ok
     }
 }
