@@ -129,6 +129,24 @@ class TeluguProvider : MainAPI() {
         return true
     }
 
+    // Other addresses of the same video, for hosts Cloudstream may not know
+    private fun alternates(link: String): List<String> {
+        val id = link.trimEnd('/').substringAfterLast('/').substringBefore('?')
+        return when {
+            link.contains("hglink.to") -> listOf(
+                "https://streamwish.to/e/$id",
+                "https://hlswish.com/e/$id",
+                "https://swiftplayers.com/e/$id"
+            )
+            link.contains("minochinos") -> listOf(
+                "https://filelions.to/v/$id",
+                "https://vidhide.com/v/$id",
+                "https://dhcplay.com/v/$id"
+            )
+            else -> emptyList()
+        }
+    }
+
     // Used when Cloudstream has no built-in extractor for a video host
     private suspend fun fallbackExtract(
         link: String,
@@ -170,7 +188,7 @@ class TeluguProvider : MainAPI() {
             if (h.startsWith("http")) rawFound.add(h)
         }
 
-        // 1) every attribute of every element (data-src, data-url, data-embed, onclick, ...)
+        // 1) every attribute of every element
         doc.allElements.forEach { el ->
             el.attributes().forEach { attr ->
                 val v = attr.value.trim()
@@ -185,7 +203,7 @@ class TeluguProvider : MainAPI() {
             }
         }
 
-        // 2) raw HTML + inline scripts (also catches escaped / base64 urls)
+        // 2) raw HTML + inline scripts
         collectUrls(res.text, rawFound)
         doc.select("script").forEach { s ->
             collectUrls(s.data(), rawFound)
@@ -209,7 +227,7 @@ class TeluguProvider : MainAPI() {
         val internal = useful.filter { it.startsWith(mainUrl) }
         val external = useful.filter { !it.startsWith(mainUrl) }.toMutableSet()
 
-        // 4) follow same-site embed / ajax endpoints once and harvest their urls
+        // 4) follow same-site embed / ajax endpoints once
         internal
             .filter { embedHint.containsMatchIn(it) && !it.contains("/category/") && !it.endsWith(".html") }
             .take(8)
@@ -235,16 +253,37 @@ class TeluguProvider : MainAPI() {
         var ok = false
         external.take(50).forEach { link ->
             try {
-                val hit = loadExtractor(link, data, subtitleCallback, callback)
-                if (hit) {
-                    ok = true
-                } else if (fallbackExtract(link, data, callback)) {
-                    ok = true
+                var hit = loadExtractor(link, data, subtitleCallback, callback)
+                if (!hit) hit = fallbackExtract(link, data, callback)
+                if (!hit) {
+                    for (alt in alternates(link)) {
+                        if (loadExtractor(alt, data, subtitleCallback, callback)) {
+                            hit = true
+                            break
+                        }
+                    }
                 }
+                if (hit) ok = true
             } catch (_: Exception) {
             }
         }
         Log.d(tag, "final ok=$ok")
+
+        // DEBUG: if nothing works, show the reason as a fake entry in the server list
+        if (!ok) {
+            val hosts = external.map { it.substringAfter("//").substringBefore("/") }
+                .distinct().joinToString(",")
+            val info = "DEBUG status=${res.code} len=${res.text.length} " +
+                "btn=${res.text.contains("stream-link-btn")} " +
+                "found=${found.size} ext=${external.size} hosts=$hosts"
+            callback(
+                newExtractorLink(name, info, "https://example.com/debug.m3u8") {
+                    this.type = ExtractorLinkType.M3U8
+                    this.quality = Qualities.Unknown.value
+                }
+            )
+            return true
+        }
         return ok
     }
 }
