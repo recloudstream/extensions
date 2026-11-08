@@ -4,6 +4,8 @@ import android.util.Base64
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import com.lagradost.nicehttp.NiceResponse
+import kotlinx.coroutines.delay
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
@@ -172,14 +174,44 @@ class TeluguProvider : MainAPI() {
         return ok
     }
 
+    private fun debugLink(info: String): ExtractorLink {
+        return newExtractorLink(name, info, "https://example.com/debug.m3u8") {
+            this.type = ExtractorLinkType.M3U8
+            this.quality = Qualities.Unknown.value
+        }
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val res = app.get(data, referer = mainUrl)
-        val doc = res.document
+        // Open the movie page, up to 3 tries (the site is sometimes slow or refuses)
+        var res: NiceResponse? = null
+        var err = ""
+        for (i in 1..3) {
+            try {
+                val r = app.get(data, referer = mainUrl, timeout = 30L)
+                res = r
+                if (r.code == 200 && r.text.contains("stream-link-btn")) {
+                    err = ""
+                    break
+                }
+                err = "try$i status=${r.code} len=${r.text.length}"
+            } catch (e: Exception) {
+                err = "try$i " + e.javaClass.simpleName + ":" + (e.message ?: "").take(60)
+            }
+            delay(1500)
+        }
+
+        if (res == null) {
+            callback(debugLink("DEBUG page failed $err"))
+            return true
+        }
+        val page = res
+
+        val doc = page.document
         val rawFound = linkedSetOf<String>()
 
         // 0) the site's own server buttons (their links contain a line break inside)
@@ -204,7 +236,7 @@ class TeluguProvider : MainAPI() {
         }
 
         // 2) raw HTML + inline scripts
-        collectUrls(res.text, rawFound)
+        collectUrls(page.text, rawFound)
         doc.select("script").forEach { s ->
             collectUrls(s.data(), rawFound)
             Regex("""["']([A-Za-z0-9+/=_-]{24,})["']""").findAll(s.data()).forEach { m ->
@@ -220,7 +252,7 @@ class TeluguProvider : MainAPI() {
             cleaned.none { o -> o != u && o.startsWith(u) }
         }
 
-        Log.d(tag, "page=${res.url} status=${res.code} found=${found.size}")
+        Log.d(tag, "page=${page.url} status=${page.code} found=${found.size}")
         found.forEach { Log.d(tag, "found: $it") }
 
         val useful = found.filter { isUseful(it) }
@@ -269,19 +301,13 @@ class TeluguProvider : MainAPI() {
         }
         Log.d(tag, "final ok=$ok")
 
-        // DEBUG: if nothing works, show the reason as a fake entry in the server list
         if (!ok) {
             val hosts = external.map { it.substringAfter("//").substringBefore("/") }
                 .distinct().joinToString(",")
-            val info = "DEBUG status=${res.code} len=${res.text.length} " +
-                "btn=${res.text.contains("stream-link-btn")} " +
-                "found=${found.size} ext=${external.size} hosts=$hosts"
-            callback(
-                newExtractorLink(name, info, "https://example.com/debug.m3u8") {
-                    this.type = ExtractorLinkType.M3U8
-                    this.quality = Qualities.Unknown.value
-                }
-            )
+            val info = "DEBUG status=${page.code} len=${page.text.length} " +
+                "btn=${page.text.contains("stream-link-btn")} " +
+                "found=${found.size} ext=${external.size} hosts=$hosts $err"
+            callback(debugLink(info))
             return true
         }
         return ok
